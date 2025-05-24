@@ -203,7 +203,11 @@ async def list_conversations():
                     (SELECT COUNT(DISTINCT speaker_id) 
                      FROM utterances 
                      WHERE conversation_id = c.id
-                    ) as speaker_count
+                    ) as speaker_count,
+                    (SELECT COUNT(*) 
+                     FROM utterances 
+                     WHERE conversation_id = c.id
+                    ) as utterance_count
                 FROM conversations c
                 ORDER BY c.date_processed DESC
             """
@@ -217,7 +221,11 @@ async def list_conversations():
                 (SELECT COUNT(DISTINCT speaker_id) 
                  FROM utterances 
                  WHERE conversation_id = c.id
-                ) as speaker_count
+                ) as speaker_count,
+                (SELECT COUNT(*) 
+                 FROM utterances 
+                 WHERE conversation_id = c.id
+                ) as utterance_count
             FROM conversations c
             ORDER BY c.date_processed DESC
             """
@@ -228,22 +236,38 @@ async def list_conversations():
         # Format the response
         result = []
         for conv in conversations:
+            conversation_id = str(conv[0])
+            
+            # Get speaker names for this conversation
+            cur.execute("""
+                SELECT DISTINCT s.name 
+                FROM utterances u
+                JOIN speakers s ON u.speaker_id = s.id
+                WHERE u.conversation_id = %s
+                ORDER BY s.name
+            """, (conversation_id,))
+            speaker_names = [row[0] for row in cur.fetchall()]
+            
             if display_name_exists:
                 result.append({
-                    "id": str(conv[0]),  # Convert to string to ensure .slice works
+                    "id": conversation_id,
                     "conversation_id": str(conv[1]),
-                    "created_at": conv[2].isoformat() if conv[2] else None,  # Keep the name as created_at for API consistency
+                    "created_at": conv[2].isoformat() if conv[2] else None,
                     "duration": conv[3],
                     "display_name": conv[4],
-                    "speaker_count": conv[5]
+                    "speaker_count": conv[5],
+                    "utterance_count": conv[6],
+                    "speakers": speaker_names
                 })
             else:
                 result.append({
-                    "id": str(conv[0]),  # Convert to string to ensure .slice works
+                    "id": conversation_id,
                     "conversation_id": str(conv[1]),
-                    "created_at": conv[2].isoformat() if conv[2] else None,  # Keep the name as created_at for API consistency
+                    "created_at": conv[2].isoformat() if conv[2] else None,
                     "duration": conv[3],
-                    "speaker_count": conv[4]
+                    "speaker_count": conv[4],
+                    "utterance_count": conv[5],
+                    "speakers": speaker_names
                 })
         
         cur.close()
@@ -718,6 +742,81 @@ async def update_speaker(speaker_id: str, name: str = Form(...)):
         raise
     except Exception as e:
         print(f"Error updating speaker: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/speakers/{speaker_id}/details")
+async def get_speaker_details(speaker_id: str):
+    try:
+        # Connect to the database
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if speaker exists and get basic info
+        cur.execute("""
+            SELECT id, name FROM speakers WHERE id = %s
+        """, (speaker_id,))
+        
+        speaker = cur.fetchone()
+        
+        if not speaker:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Speaker with ID '{speaker_id}' not found"
+            )
+        
+        # Get utterance statistics
+        cur.execute("""
+            SELECT 
+                COUNT(*) as utterance_count,
+                COALESCE(SUM(end_ms - start_ms), 0) as total_duration,
+                COALESCE(AVG(end_ms - start_ms), 0) as avg_duration
+            FROM utterances 
+            WHERE speaker_id = %s
+        """, (speaker_id,))
+        
+        stats = cur.fetchone()
+        
+        # Get recent utterances (last 5)
+        cur.execute("""
+            SELECT u.text, u.start_ms, u.end_ms, c.display_name, c.conversation_id
+            FROM utterances u
+            LEFT JOIN conversations c ON u.conversation_id = c.id
+            WHERE u.speaker_id = %s
+            ORDER BY c.date_processed DESC, u.start_ms DESC
+            LIMIT 5
+        """, (speaker_id,))
+        
+        recent_utterances = cur.fetchall()
+        
+        cur.close()
+        conn.close()
+        
+        # Format the response
+        result = {
+            "id": str(speaker[0]),
+            "name": speaker[1],
+            "utterance_count": int(stats[0]) if stats[0] is not None else 0,
+            "total_duration": int(stats[1]) if stats[1] is not None else 0,
+            "avg_duration": int(stats[2]) if stats[2] is not None else 0,
+            "recent_utterances": [
+                {
+                    "text": utterance[0],
+                    "start_time": int(utterance[1]) if utterance[1] is not None else 0,
+                    "end_time": int(utterance[2]) if utterance[2] is not None else 0,
+                    "conversation_name": utterance[3],
+                    "conversation_id": utterance[4]
+                }
+                for utterance in recent_utterances
+            ]
+        }
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting speaker details: {str(e)}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 

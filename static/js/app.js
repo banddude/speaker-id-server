@@ -277,8 +277,9 @@ async function loadConversations() {
 
             const date = new Date(conv.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
             const displayName = conv.display_name || `Conversation ${conv.id.slice(-8)}`;
-            const speakerNames = conv.speakers && conv.speakers.length > 0 ? conv.speakers.join(', ') : 'No speakers identified'; // Plain text list
+            const speakerNames = conv.speakers && conv.speakers.length > 0 ? conv.speakers.join(', ') : 'No speakers identified';
             const utteranceCount = conv.utterance_count || 0;
+            const speakerCount = conv.speaker_count || 0;
             const duration = conv.duration ? formatTime(conv.duration * 1000) : '0:00';
 
             // Generate HTML matching the CSS
@@ -290,12 +291,9 @@ async function loadConversations() {
                 <div class="conversation-meta">
                     <span class="meta-item">${duration}</span>
                     <span class="meta-item">• ${utteranceCount} utterances</span>
-                    <span class="meta-item">• ${speakerNames}</span> 
+                    <span class="meta-item">• ${speakerCount} speakers: ${speakerNames}</span> 
                     </div>
                 `;
-                
-            // Note: Removed the explicit fetch for details per conversation for performance
-            // The speaker names might come directly from the /api/conversations endpoint now
             
             conversationsContainer.appendChild(card);
             
@@ -351,47 +349,89 @@ async function loadSpeakers() {
         console.log('Global speakers list updated:', speakers);
         
         if (!Array.isArray(speakersData) || speakersData.length === 0) {
-            speakersContainer.innerHTML = '<p>No speakers found. Process a conversation to create speakers.</p>';
+            speakersContainer.innerHTML = `
+                <div class="speakers-empty">
+                    <h3>No Speakers Found</h3>
+                    <p>Process a conversation or add speakers manually to get started.</p>
+                </div>
+            `;
             return;
         }
         
         speakersContainer.innerHTML = '';
         
+        // Calculate max values for relative activity bars
+        const maxUtterances = Math.max(...speakersData.map(s => s.utterance_count || 0));
+        const maxDuration = Math.max(...speakersData.map(s => s.total_duration || 0));
+        
         speakersData.forEach(speaker => {
             const card = document.createElement('div');
             card.className = 'speaker-card';
             
+            // Generate speaker initials for avatar
+            const initials = speaker.name
+                .split(' ')
+                .map(n => n[0])
+                .join('')
+                .toUpperCase()
+                .slice(0, 2);
+            
+            // Calculate activity percentages
+            const utteranceActivity = maxUtterances > 0 ? (speaker.utterance_count / maxUtterances) * 100 : 0;
+            const durationActivity = maxDuration > 0 ? (speaker.total_duration / maxDuration) * 100 : 0;
+            
             card.innerHTML = `
-                <div class="card-header">
-                <h3>${speaker.name}</h3>
-                    <div class="card-actions">
-                        <button class="button-icon-only edit">✏️</button>
-                        <button class="button-icon-only delete">🗑️</button>
-                </div>
+                <div class="speaker-avatar">${initials}</div>
+                <div class="speaker-header">
+                    <div class="speaker-info">
+                        <h3>${speaker.name}</h3>
                     </div>
+                    <div class="speaker-actions">
+                        <button class="speaker-action-btn edit" title="Edit Speaker">
+                            ✏️
+                        </button>
+                        <button class="speaker-action-btn delete" title="Delete Speaker">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
                 <div class="speaker-stats">
-                    <div class="stat-item">
+                    <div class="stat-card">
+                        <span class="stat-number">${speaker.utterance_count || 0}</span>
                         <span class="stat-label">Utterances</span>
-                        <span class="stat-value">${speaker.utterance_count}</span>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Total Duration</span>
-                        <span class="stat-value">${formatDuration(speaker.total_duration)}</span>
+                    <div class="stat-card">
+                        <span class="stat-number">${formatDuration(speaker.total_duration || 0)}</span>
+                        <span class="stat-label">Speaking Time</span>
+                    </div>
                 </div>
-            </div>
-        `;
+                <div class="speaker-activity">
+                    <div class="activity-label">Activity Level</div>
+                    <div class="activity-bar">
+                        <div class="activity-fill" style="width: ${Math.max(utteranceActivity, 5)}%"></div>
+                    </div>
+                </div>
+            `;
         
             speakersContainer.appendChild(card);
             
             // Add event listeners
-            const editButton = card.querySelector('.button-icon-only.edit');
-            editButton.addEventListener('click', () => {
+            const editButton = card.querySelector('.speaker-action-btn.edit');
+            editButton.addEventListener('click', (e) => {
+                e.stopPropagation();
                 showEditSpeakerModal(speaker.id, speaker.name);
             });
             
-            const deleteButton = card.querySelector('.button-icon-only.delete');
-            deleteButton.addEventListener('click', () => {
+            const deleteButton = card.querySelector('.speaker-action-btn.delete');
+            deleteButton.addEventListener('click', (e) => {
+                e.stopPropagation();
                 showDeleteSpeakerModal(speaker.id, speaker.name, speaker.utterance_count);
+            });
+            
+            // Add click handler for the whole card (optional - could navigate to speaker details)
+            card.addEventListener('click', () => {
+                console.log(`Clicked on speaker: ${speaker.name}`);
+                // Could implement speaker detail view here
             });
         });
     } catch (error) {
@@ -761,7 +801,7 @@ async function showReassignUtterancesModal(fromSpeakerId, fromSpeakerName) {
         
         try {
             // Assuming the endpoint is for reassigning *all* utterances of a speaker ID
-            const response = await fetch(`/api/speakers/${fromSpeakerId}/reassign`, { 
+            const response = await fetch(`/api/speakers/${fromSpeakerId}/update-all-utterances`, { 
                 method: 'PUT', 
                 body: formData
             }); 

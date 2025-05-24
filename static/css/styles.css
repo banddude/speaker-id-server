@@ -390,9 +390,206 @@ body {
 }
 
 /* Mobile Responsiveness */
+/* ============= SPEAKERS VIEW STYLES ============= */
+.speakers-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+    padding: 0;
+}
+
+.speaker-card {
+    background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid #333;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.speaker-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #4a9eff, #6c5ce7, #fd79a8);
+    border-radius: 12px 12px 0 0;
+}
+
+.speaker-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+    border-color: #4a9eff;
+}
+
+.speaker-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4a9eff, #6c5ce7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: white;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
+}
+
+.speaker-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.speaker-info h3 {
+    color: #ffffff;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.speaker-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.speaker-action-btn {
+    background: #333;
+    border: 1px solid #444;
+    color: #b0b0b0;
+    border-radius: 8px;
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+    min-width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.speaker-action-btn:hover {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: white;
+    transform: scale(1.05);
+}
+
+.speaker-action-btn.delete:hover {
+    background: #e74c3c;
+    border-color: #e74c3c;
+}
+
+.speaker-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.stat-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 0.75rem;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-number {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #4a9eff;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.speaker-activity {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.activity-label {
+    font-size: 0.75rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.activity-bar {
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+}
+
+.activity-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4a9eff, #6c5ce7);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    min-width: 2px;
+}
+
+.add-speaker-btn {
+    background: #4a9eff;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
+}
+
+.add-speaker-btn:hover {
+    background: #3a7bc8;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(74, 158, 255, 0.4);
+}
+
+.speakers-empty {
+    text-align: center;
+    padding: 3rem;
+    color: #888;
+}
+
+.speakers-empty h3 {
+    color: #b0b0b0;
+    margin-bottom: 0.5rem;
+}
+
 @media (max-width: 768px) {
     .speakers-list {
         grid-template-columns: 1fr;
+        gap: 1rem;
         padding: 0.75rem;
     }
 
@@ -402,10 +599,17 @@ body {
 
     .speaker-stats {
         grid-template-columns: 1fr;
+        gap: 0.75rem;
     }
 
-    .stat-item.full-width {
-        grid-column: auto;
+    .speaker-header {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .speaker-actions {
+        align-self: stretch;
+        justify-content: center;
     }
 
     .toast {
