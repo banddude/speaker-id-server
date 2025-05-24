@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input, button {
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+        button {
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        .result {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            min-height: 100px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>API Test Page</h1>
+    
+    <div class="test-section">
+        <h2>Get Conversations</h2>
+        <button id="get-conversations">Load Conversations</button>
+        <div id="conversations-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Get Speakers</h2>
+        <button id="get-speakers">Load Speakers</button>
+        <div id="speakers-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>View Conversation</h2>
+        <label for="conversation-id">Conversation ID:</label>
+        <input type="text" id="conversation-id" placeholder="Enter conversation ID">
+        <button id="view-conversation">Load Conversation</button>
+        <div id="conversation-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Update Utterance Text</h2>
+        <label for="utterance-id-text">Utterance ID:</label>
+        <input type="text" id="utterance-id-text" placeholder="Enter utterance ID">
+        <label for="new-text">New Text:</label>
+        <input type="text" id="new-text" placeholder="Enter new text">
+        <button id="update-text">Update Text</button>
+        <div id="update-text-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Update Utterance Speaker</h2>
+        <label for="utterance-id-speaker">Utterance ID:</label>
+        <input type="text" id="utterance-id-speaker" placeholder="Enter utterance ID">
+        <label for="speaker-id">Speaker ID:</label>
+        <input type="text" id="speaker-id" placeholder="Enter speaker ID">
+        <button id="update-speaker">Update Speaker</button>
+        <div id="update-speaker-result" class="result"></div>
+    </div>
+    
+    <script>
+        // Get Conversations
+        document.getElementById('get-conversations').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('conversations-result');
+            resultDiv.textContent = 'Loading...';
+            
+            try {
+                const response = await fetch('/api/conversations');
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Populate conversation ID field with first conversation
+                if (data.length > 0) {
+                    document.getElementById('conversation-id').value = data[0].id;
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+        
+        // Get Speakers
+        document.getElementById('get-speakers').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('speakers-result');
+            resultDiv.textContent = 'Loading...';
+            
+            try {
+                const response = await fetch('/api/speakers');
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Populate speaker ID field with first speaker
+                if (data.length > 0) {
+                    document.getElementById('speaker-id').value = data[0].id;
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+        
+        // View Conversation
+        document.getElementById('view-conversation').addEventListener('click', async () => {
+            const conversationId = document.getElementById('conversation-id').value;
+            if (!conversationId) {
+                alert('Please enter a conversation ID');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('conversation-result');
+            resultDiv.textContent = 'Loading...';
+            
+            try {
+                const response = await fetch(`/api/conversations/${conversationId}`);
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Populate utterance ID fields with first utterance
+                if (data.utterances && data.utterances.length > 0) {
+                    document.getElementById('utterance-id-text').value = data.utterances[0].id;
+                    document.getElementById('utterance-id-speaker').value = data.utterances[0].id;
+                    document.getElementById('new-text').value = data.utterances[0].text || 'Test text';
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+        
+        // Update Utterance Text
+        document.getElementById('update-text').addEventListener('click', async () => {
+            const utteranceId = document.getElementById('utterance-id-text').value;
+            const newText = document.getElementById('new-text').value;
+            
+            if (!utteranceId || !newText) {
+                alert('Please enter both utterance ID and new text');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('update-text-result');
+            resultDiv.textContent = 'Updating...';
+            
+            try {
+                const response = await fetch(`/api/utterances/${utteranceId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: newText })
+                });
+                
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    resultDiv.textContent = JSON.stringify(data, null, 2);
+                } catch (e) {
+                    resultDiv.textContent = `Response status: ${response.status}\n\nRaw response:\n${responseText}`;
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+        
+        // Update Utterance Speaker
+        document.getElementById('update-speaker').addEventListener('click', async () => {
+            const utteranceId = document.getElementById('utterance-id-speaker').value;
+            const speakerId = document.getElementById('speaker-id').value;
+            
+            if (!utteranceId || !speakerId) {
+                alert('Please enter both utterance ID and speaker ID');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('update-speaker-result');
+            resultDiv.textContent = 'Updating...';
+            
+            try {
+                const response = await fetch(`/api/utterances/${utteranceId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ speaker_id: speakerId })
+                });
+                
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    resultDiv.textContent = JSON.stringify(data, null, 2);
+                } catch (e) {
+                    resultDiv.textContent = `Response status: ${response.status}\n\nRaw response:\n${responseText}`;
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html> 

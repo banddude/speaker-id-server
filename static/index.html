@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speaker ID Dashboard</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="icon" href="/static/favicon.ico">
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>Speaker ID</h1>
+            </div>
+            <div class="sidebar-nav">
+                <button class="nav-item active" data-view="conversations">
+                    <span class="icon">🗣️</span>
+                    Conversations
+                </button>
+                <button class="nav-item" data-view="speakers">
+                    <span class="icon">👤</span>
+                    Speakers
+                </button>
+                <button class="nav-item" data-view="upload">
+                    <span class="icon">📤</span>
+                    Upload
+                </button>
+                <button class="nav-item" data-view="pinecone">
+                    <span class="icon">🔍</span>
+                    Pinecone Manager
+                </button>
+            </div>
+        </div>
+        <div class="main-content">
+            <!-- Conversations View -->
+            <div id="conversations-view" class="view active">
+                <div class="view-header">
+                    <h2>Conversations</h2>
+                </div>
+                <div id="conversations-list" class="conversations-list">
+                    <div class="spinner-container">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Conversation Detail View -->
+            <div id="conversation-detail-view" class="view">
+                <!-- Content will be loaded dynamically -->
+            </div>
+
+            <!-- Speakers View -->
+            <div id="speakers-view" class="view">
+                <div class="view-header">
+                    <h2>Speakers</h2>
+                </div>
+                <div id="speakers-list" class="speakers-list">
+                    <div class="spinner-container">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload View -->
+            <div id="upload-view" class="view">
+                <div class="view-header">
+                    <h2>Upload Audio</h2>
+                    <p>Upload an audio file to extract and identify speakers.</p>
+                </div>
+                <div class="upload-container">
+                    <div class="upload-box">
+                        <div class="upload-header">
+                            <h3>Upload Conversation</h3>
+                        </div>
+                        <form id="upload-form" enctype="multipart/form-data">
+                            <div class="form-group">
+                                <label for="display-name">Conversation Name (Optional)</label>
+                                <input type="text" id="display-name" name="display_name" placeholder="Enter a name for this conversation">
+                            </div>
+                            
+                            <div class="slider-container">
+                                <div class="slider-labels">
+                                    <label for="match-threshold">Speaker Match Threshold: <span id="match-threshold-value">0.40</span></label>
+                                    <div class="slider-hint">Lower values identify more speakers, higher values are more strict.</div>
+                                </div>
+                                <input type="range" id="match-threshold" name="match_threshold" min="0.0" max="1.0" step="0.05" value="0.40">
+                            </div>
+                            
+                            <div class="slider-container">
+                                <div class="slider-labels">
+                                    <label for="auto-update-threshold">Auto-Update Threshold: <span id="auto-update-threshold-value">0.50</span></label>
+                                    <div class="slider-hint">Only add high-confidence samples to database. Higher values = more confident.</div>
+                                </div>
+                                <input type="range" id="auto-update-threshold" name="auto_update_threshold" min="0.0" max="1.0" step="0.05" value="0.50">
+                            </div>
+                            
+                            <div class="file-input-wrapper">
+                                <label for="audio-file" class="file-input-button">Choose Audio File</label>
+                                <input type="file" id="audio-file" name="file" accept="audio/*" required>
+                                <div id="file-name"></div>
+                            </div>
+                            
+                            <button type="submit" class="upload-submit-button">Process Audio</button>
+                        </form>
+                        
+                        <!-- Add processing status container -->
+                        <div id="processing-status" class="processing-status">
+                            <div class="status-header">
+                                <h4>Processing Status</h4>
+                                <div class="status-indicator">
+                                    <div class="status-spinner"></div>
+                                    <span id="current-status">Waiting for upload...</span>
+                                </div>
+                            </div>
+                            <div class="status-details">
+                                <div id="status-steps" class="status-steps">
+                                    <div class="status-step" data-step="upload">
+                                        <span class="step-icon">📤</span>
+                                        <span class="step-name">Upload</span>
+                                        <span class="step-status">Waiting</span>
+                                    </div>
+                                    <div class="status-step" data-step="transcribe">
+                                        <span class="step-icon">🔊</span>
+                                        <span class="step-name">Transcribe</span>
+                                        <span class="step-status">Waiting</span>
+                                    </div>
+                                    <div class="status-step" data-step="identify">
+                                        <span class="step-icon">👤</span>
+                                        <span class="step-name">Identify Speakers</span>
+                                        <span class="step-status">Waiting</span>
+                                    </div>
+                                    <div class="status-step" data-step="database">
+                                        <span class="step-icon">💾</span>
+                                        <span class="step-name">Update Database</span>
+                                        <span class="step-status">Waiting</span>
+                                    </div>
+                                </div>
+                                <div id="status-log" class="status-log"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pinecone Manager View -->
+            <div id="pinecone-view" class="view">
+                <div class="view-header">
+                    <h2>Pinecone Manager</h2>
+                </div>
+                <div class="pinecone-container">
+                    <div class="pinecone-section" id="add-speaker-section">
+                        <h3>Add New Speaker</h3>
+                        <form id="add-speaker-form" class="pinecone-form">
+                            <div class="pinecone-form-group">
+                                <label for="speaker-name">Speaker Name</label>
+                                <input type="text" id="speaker-name" name="speaker_name" placeholder="Enter speaker name" required>
+                            </div>
+                            <div class="pinecone-form-group">
+                                <label for="speaker-audio-file">Voice Sample</label>
+                                <input type="file" id="speaker-audio-file" name="audio_file" accept="audio/*" required>
+                            </div>
+                            <button type="submit" class="pinecone-button">Add Speaker</button>
+                        </form>
+                    </div>
+
+                    <div class="pinecone-section" id="add-embedding-section" style="display: none;">
+                        <h3>Add Voice Embedding</h3>
+                        <form id="add-embedding-form" class="pinecone-form">
+                            <div class="pinecone-form-group">
+                                <label for="embedding-speaker-name">Speaker Name</label>
+                                <input type="text" id="embedding-speaker-name" name="speaker_name" readonly>
+                            </div>
+                            <div class="pinecone-form-group">
+                                <label for="embedding-audio-file">Voice Sample</label>
+                                <input type="file" id="embedding-audio-file" name="audio_file" accept="audio/*" required>
+                            </div>
+                            <button type="submit" class="pinecone-button">Add Embedding</button>
+                            <button type="button" class="pinecone-button" style="background-color: #ccc;" onclick="document.getElementById('add-embedding-section').style.display = 'none'; document.getElementById('add-speaker-section').style.display = 'block';">Cancel</button>
+                        </form>
+                    </div>
+
+                    <div id="status-container"></div>
+
+                    <div class="pinecone-section">
+                        <h3>Speakers</h3>
+                        <div id="pinecone-speakers-container" class="pinecone-speaker-list">
+                            <div class="pinecone-loading">
+                                <div class="pinecone-spinner"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container"></div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
