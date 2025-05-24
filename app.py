@@ -25,10 +25,15 @@ from pinecone import Pinecone
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "modules"))
 
 # Import required modules directly from the modules directory
-from modules import embed
-from modules.speaker_id import process_conversation, transcribe, test_voice_segment, convert_to_wav
-from modules.database.s3_operations import downloadFile, deleteFile, deleteFolder, generate_presigned_url
-from modules.database.db_operations import get_db_connection, init_database, add_speaker, get_utterances_by_conversation, format_time
+try:
+    from modules import embed
+    from modules.speaker_id import process_conversation, transcribe, test_voice_segment, convert_to_wav
+    from modules.database.s3_operations import downloadFile, deleteFile, deleteFolder, generate_presigned_url
+    from modules.database.db_operations import get_db_connection, init_database, add_speaker, get_utterances_by_conversation, format_time
+    print("All modules imported successfully")
+except ImportError as e:
+    print(f"Warning: Module import failed: {e}")
+    print("Some functionality may be limited.")
 
 # Load environment variables
 load_dotenv()
@@ -61,6 +66,7 @@ else:
 # Initialize database tables if needed
 try:
     init_database()
+    print("Database initialized successfully")
 except Exception as e:
     print(f"Warning: Database initialization failed: {e}")
     print("This is not critical if tables already exist.")
@@ -1355,6 +1361,11 @@ async def delete_pinecone_embedding(embedding_id: str):
         print(f"Error deleting embedding: {error_message}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=error_message)
+
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint"""
+    return {"status": "healthy", "message": "Speaker ID API is running"}
 
 if __name__ == '__main__':
     import uvicorn
