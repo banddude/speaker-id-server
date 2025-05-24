@@ -1,7 +1,7 @@
 fastapi==0.104.1
 uvicorn==0.24.0
 psycopg2-binary==2.9.9
-pinecone-client==3.0.0
+pinecone==5.0.1
 assemblyai==0.37.0
 boto3==1.29.3
 python-dotenv==1.0.0
