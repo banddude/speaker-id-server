@@ -301,8 +301,12 @@ def process_conversation(file_path, conversation_id=None, display_name=None, mat
         # Process utterances and store in S3/database
         utterance_metadata = []
         for i, utterance in enumerate(utterances):
-            if "words" not in utterance:
-                continue
+            # TODO: TEMPORARY FIX - AssemblyAI should be returning "words" field but isn't
+            # Need to investigate why words field is missing from API response
+            # For now, skip this check to get utterance processing working
+            # REIMPLEMENT: Proper words field handling after debugging AssemblyAI response
+            # if "words" not in utterance:
+            #     continue
             
             # Extract audio segment
             start_ms = int(utterance["start"])
@@ -340,7 +344,7 @@ def process_conversation(file_path, conversation_id=None, display_name=None, mat
                 "confidence": confidence,
                 "speaker": speaker_name,
                 "embedding_id": embedding_id,
-                "words": utterance["words"],  # Include word-level data
+                "words": utterance.get("words", []),  # TODO: Should have words but field missing - debug later
                 "conversation_id": db_conversation_id
             }
             utterance_metadata.append(utterance_data)
@@ -374,7 +378,7 @@ def process_conversation(file_path, conversation_id=None, display_name=None, mat
                 'speaker_id': speaker_id,
                 'speaker': speaker_name,
                 'conversation_id': db_conversation_id,
-                'words': utterance["words"]  # Include word-level data
+                'words': utterance.get("words", [])  # TODO: Should have words but field missing - debug later
             })
         
         # Try to identify unknown speakers by combining their utterances

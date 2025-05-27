@@ -210,7 +210,7 @@ def add_utterance(conversation_id=None, utterance_id=None, s3_path=None, start_t
             end_time = format_time(end_ms)
             
             # Get S3 path from utterance info
-            s3_path = utterance_info.get('audio_file')
+            s3_path = utterance_info.get('s3_path') or utterance_info.get('audio_file')
             if not s3_path:
                 # Fallback to constructing the path
                 conversation_id_value = utterance_info.get('conversation_id')
