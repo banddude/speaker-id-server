@@ -210,7 +210,7 @@ def add_utterance(conversation_id=None, utterance_id=None, s3_path=None, start_t
             end_time = format_time(end_ms)
             
             # Get S3 path from utterance info
-            s3_path = utterance_info.get('s3_path')
+            s3_path = utterance_info.get('audio_file')
             if not s3_path:
                 # Fallback to constructing the path
                 conversation_id_value = utterance_info.get('conversation_id')
@@ -303,8 +303,8 @@ def add_utterance(conversation_id=None, utterance_id=None, s3_path=None, start_t
             if 'audio_file' in column_names:
                 columns.append('audio_file')
                 values.append(s3_path)
-            elif 's3_path' in column_names:
-                columns.append('s3_path')
+            elif 'audio_file' in column_names:
+                columns.append('audio_file')
                 values.append(s3_path)
             
             if 'speaker_id' in column_names:
