@@ -216,8 +216,11 @@ def add_utterance(conversation_id=None, utterance_id=None, s3_path=None, start_t
                 conversation_id_value = utterance_info.get('conversation_id')
                 s3_path = f"conversations/{conversation_id_value}/utterances/utterance_{utterance_info.get('id', '000')}.wav"
             
-            # Get conversation ID from utterance info
+            # Get conversation ID from utterance info and ensure it's a UUID
             conversation_id_value = utterance_info.get('conversation_id')
+            # Ensure conversation_id is treated as UUID type
+            if conversation_id_value and not isinstance(conversation_id_value, uuid.UUID):
+                conversation_id_value = uuid.UUID(str(conversation_id_value))
             
             # Insert the utterance
             cur.execute(
@@ -316,7 +319,11 @@ def add_utterance(conversation_id=None, utterance_id=None, s3_path=None, start_t
             
             if 'conversation_id' in column_names:
                 columns.append('conversation_id')
-                values.append(conversation_id)
+                # Ensure conversation_id is treated as UUID type
+                uuid_conversation_id = conversation_id
+                if conversation_id and not isinstance(conversation_id, uuid.UUID):
+                    uuid_conversation_id = uuid.UUID(str(conversation_id))
+                values.append(uuid_conversation_id)
             
             # Build the dynamic INSERT query
             placeholders = ', '.join(['%s'] * len(values))
@@ -353,7 +360,12 @@ def add_conversation_speaker(conversation_id, speaker_id):
     cur = conn.cursor()
     
     try:
-        # Both conversation_id and speaker_id should be UUIDs at this point
+        # Ensure both conversation_id and speaker_id are UUIDs
+        if conversation_id and not isinstance(conversation_id, uuid.UUID):
+            conversation_id = uuid.UUID(str(conversation_id))
+        if speaker_id and not isinstance(speaker_id, uuid.UUID):
+            speaker_id = uuid.UUID(str(speaker_id))
+            
         print(f"Adding speaker {speaker_id} to conversation {conversation_id}")
         
         cur.execute(
@@ -408,6 +420,10 @@ def get_utterances_by_conversation(conversation_id):
     cur = conn.cursor(cursor_factory=DictCursor)
     
     try:
+        # Ensure conversation_id is treated as UUID if it's being used to match against UUID field
+        if conversation_id and not isinstance(conversation_id, uuid.UUID):
+            conversation_id = uuid.UUID(str(conversation_id))
+            
         cur.execute(
             """
             SELECT u.*, s.name as speaker_name
