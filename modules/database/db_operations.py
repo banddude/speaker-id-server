@@ -246,9 +246,9 @@ def add_utterance(conversation_id=None, utterance_id=None, s3_path=None, start_t
             # Get the utterance ID
             utterance_db_id = cur.fetchone()[0]
             
-            # Store word timestamps if available
+            # Store word timestamps if available (before commit, using same transaction)
             if 'words' in utterance_info:
-                add_word_timestamps(utterance_db_id, utterance_info['words'])
+                add_word_timestamps_in_transaction(cur, utterance_db_id, utterance_info['words'])
             
             conn.commit()
             return utterance_db_id
@@ -505,14 +505,11 @@ def init_database():
         cur.close()
         conn.close()
 
-def add_word_timestamps(utterance_id, words):
-    """Add word-level timestamps to the database"""
+def add_word_timestamps_in_transaction(cur, utterance_id, words):
+    """Add word-level timestamps using existing cursor/transaction"""
     if not words:
         return
         
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
     try:
         # Prepare the insert statement (without word_index since it doesn't exist in the table)
         insert_query = """
@@ -533,8 +530,23 @@ def add_word_timestamps(utterance_id, words):
             )
             cur.execute(insert_query, values)
         
-        conn.commit()
         print(f"Added {len(words)} word timestamps for utterance {utterance_id}")
+        
+    except Exception as e:
+        print(f"Error adding word timestamps: {e}")
+        raise
+
+def add_word_timestamps(utterance_id, words):
+    """Add word-level timestamps to the database (standalone version)"""
+    if not words:
+        return
+        
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        add_word_timestamps_in_transaction(cur, utterance_id, words)
+        conn.commit()
         
     except Exception as e:
         print(f"Error adding word timestamps: {e}")

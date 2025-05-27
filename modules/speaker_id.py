@@ -66,7 +66,11 @@ def convert_to_wav(input_file):
 def transcribe(file_path):
     """Transcribe audio file using AssemblyAI"""
     print(f"\nTranscribing {file_path}...")
-    config = aai.TranscriptionConfig(speaker_labels=True)
+    config = aai.TranscriptionConfig(
+        speaker_labels=True
+        # TODO: According to docs, word-level timestamps should be included by default
+        # If 'words' field is still missing, we may need to add additional config
+    )
     transcriber = aai.Transcriber(config=config)
     transcript = transcriber.transcribe(file_path)
     print("\nTranscription data:")
