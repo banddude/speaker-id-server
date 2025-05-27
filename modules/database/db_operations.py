@@ -484,7 +484,7 @@ def init_database():
             CREATE TABLE IF NOT EXISTS word_timestamps (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 utterance_id UUID REFERENCES utterances(id),
-                text TEXT NOT NULL,
+                word TEXT NOT NULL,
                 start_ms INTEGER NOT NULL,
                 end_ms INTEGER NOT NULL,
                 confidence FLOAT,
@@ -517,7 +517,7 @@ def add_word_timestamps(utterance_id, words):
         # Prepare the insert statement
         insert_query = """
             INSERT INTO word_timestamps 
-            (utterance_id, text, start_ms, end_ms, confidence, speaker, word_index)
+            (utterance_id, word, start_ms, end_ms, confidence, speaker, word_index)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
         
