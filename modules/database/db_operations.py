@@ -224,7 +224,7 @@ def add_utterance(conversation_id=None, utterance_id=None, s3_path=None, start_t
                 """
                 INSERT INTO utterances 
                 (utterance_id, conversation_id, speaker_id, start_time, end_time, 
-                start_ms, end_ms, text, confidence, embedding_id, s3_path)
+                start_ms, end_ms, text, confidence, embedding_id, audio_file)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
@@ -474,7 +474,7 @@ def init_database():
                 text TEXT,
                 confidence FLOAT,
                 embedding_id TEXT,
-                s3_path TEXT,
+                audio_file TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
