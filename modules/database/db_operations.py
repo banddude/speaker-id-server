@@ -514,23 +514,22 @@ def add_word_timestamps(utterance_id, words):
     cur = conn.cursor()
     
     try:
-        # Prepare the insert statement
+        # Prepare the insert statement (without word_index since it doesn't exist in the table)
         insert_query = """
             INSERT INTO word_timestamps 
-            (utterance_id, word, start_ms, end_ms, confidence, speaker, word_index)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            (utterance_id, word, start_ms, end_ms, confidence, speaker)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """
         
         # Insert each word
-        for i, word in enumerate(words):
+        for word in words:
             values = (
                 utterance_id,
                 word['text'],
                 word['start'],
                 word['end'],
                 word.get('confidence', 0.0),
-                word.get('speaker', None),
-                i
+                word.get('speaker', None)
             )
             cur.execute(insert_query, values)
         
