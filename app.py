@@ -542,7 +542,7 @@ async def get_conversation_audio(conversation_id: str):
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Get the conversation's original audio path
+        # Get the conversation's original audio path - try both database ID and conversation_id string
         cur.execute("""
             SELECT original_audio FROM conversations WHERE id = %s
         """, (conversation_id,))
@@ -550,7 +550,14 @@ async def get_conversation_audio(conversation_id: str):
         conversation = cur.fetchone()
         
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            # Try finding by conversation_id string
+            cur.execute("""
+                SELECT original_audio FROM conversations WHERE conversation_id = %s
+            """, (conversation_id,))
+            conversation = cur.fetchone()
+            
+            if not conversation:
+                raise HTTPException(status_code=404, detail="Conversation not found")
         
         original_audio_path = conversation[0]
         
