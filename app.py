@@ -957,7 +957,6 @@ async def toggle_utterance_pinecone_inclusion(utterance_id: str, request: Reques
             
             try:
                 # Generate embedding for this utterance
-                from modules import embed
                 
                 # Download audio file from S3 if needed
                 if audio_file_path.startswith('audio/'):
