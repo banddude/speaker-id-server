@@ -579,7 +579,6 @@ async def upload_conversation(
             # Clean up temporary files
             if temp_wav_file and os.path.exists(temp_wav_file):
                 os.remove(temp_wav_file)
-                print(f"Removed temporary WAV file: {temp_wav_file}")
             shutil.rmtree(temp_dir, ignore_errors=True)
     
     except Exception as e:
@@ -953,61 +952,48 @@ async def toggle_utterance_pinecone_inclusion(utterance_id: str, request: Reques
                 raise HTTPException(status_code=404, detail="Speaker not found")
             
             speaker_name = speaker_row[0]
-            audio_file_path = utterance[3]  # audio_file from DB
-            
-            # If audio_file_path is None, construct from conversation data
-            if not audio_file_path:
-                # Get conversation details for path construction
-                cur.execute("""
-                    SELECT conversation_id FROM conversations 
-                    WHERE id = (SELECT conversation_id FROM utterances WHERE id = %s)
-                """, (utterance_id,))
-                conv_result = cur.fetchone()
-                if conv_result:
-                    conv_id_str = conv_result[0]
-                    # Try multiple path formats
-                    paths_to_try = [
-                        f"conversations/conversation_{conv_id_str}/utterances/utterance_001.wav",
-                        f"conversations/conversation_{conv_id_str}/utterances/utterance_000.wav",
-                        f"conversations/conversation_{conv_id_str}/utterances/utterance_002.wav",
-                    ]
-                    
-                    # Find first working path
-                    for test_path in paths_to_try:
-                        presigned_url = generate_presigned_url(test_path)
-                        if presigned_url:
-                            audio_file_path = test_path
-                            print(f"Found audio file at: {test_path}")
-                            break
-                    
-                    if not audio_file_path:
-                        raise HTTPException(status_code=404, detail="Audio file not found for this utterance")
             
             try:
                 # Generate embedding for this utterance
+                # Use the existing audio endpoint to get the file
+                import tempfile
+                import requests
+                import os
+                import uuid
                 
-                # Download audio file from S3 if needed
-                if audio_file_path.startswith('audio/'):
-                    # This is an S3 path, need to download temporarily
-                    from modules.database.s3_operations import downloadFile
-                    import tempfile
-                    import os
+                # Get conversation ID for audio URL
+                cur.execute("""
+                    SELECT conversation_id FROM utterances WHERE id = %s
+                """, (utterance_id,))
+                conv_row = cur.fetchone()
+                if not conv_row:
+                    raise HTTPException(status_code=404, detail="Conversation not found for utterance")
+                
+                conv_db_id = conv_row[0]
+                
+                # Use the existing audio endpoint
+                audio_url = f"https://speaker-id-server-production.up.railway.app/api/audio/{conv_db_id}/{utterance_id}"
+                
+                # Download the audio file temporarily
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+                    local_audio_path = tmp_file.name
+                
+                try:
+                    print(f"Downloading audio from: {audio_url}")
+                    response = requests.get(audio_url, allow_redirects=True)
+                    response.raise_for_status()
                     
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
-                        local_audio_path = tmp_file.name
+                    with open(local_audio_path, 'wb') as f:
+                        f.write(response.content)
                     
-                    try:
-                        downloadFile(audio_file_path, local_audio_path)
-                        embedding = embed(local_audio_path)
-                    finally:
-                        if os.path.exists(local_audio_path):
-                            os.remove(local_audio_path)
-                else:
-                    # Local file path
-                    embedding = embed(audio_file_path)
+                    # Generate embedding
+                    embedding = embed(local_audio_path)
+                    
+                finally:
+                    if os.path.exists(local_audio_path):
+                        os.remove(local_audio_path)
                 
                 # Create unique embedding ID
-                import uuid
                 embedding_id = f"utterance_{speaker_name.replace(' ', '_')}_{uuid.uuid4().hex[:8]}"
                 
                 # Add to Pinecone
