@@ -900,6 +900,162 @@ async def update_utterance(utterance_id: str, request: Request):
         print(f"Error updating utterance: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.put("/api/utterances/{utterance_id}/pinecone-inclusion")
+async def toggle_utterance_pinecone_inclusion(utterance_id: str, request: Request):
+    """Toggle whether an utterance is included in Pinecone voice profile"""
+    try:
+        data = await request.json()
+        include_in_pinecone = data.get("include_in_pinecone")
+        
+        if include_in_pinecone is None:
+            raise HTTPException(status_code=400, detail="include_in_pinecone field is required")
+        
+        print(f"Toggling Pinecone inclusion for utterance {utterance_id} to: {include_in_pinecone}")
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Get the current utterance details
+        cur.execute("""
+            SELECT id, speaker_id, text, audio_file, start_ms, end_ms, 
+                   included_in_pinecone, utterance_embedding_id
+            FROM utterances 
+            WHERE id = %s
+        """, (utterance_id,))
+        
+        utterance = cur.fetchone()
+        if not utterance:
+            raise HTTPException(status_code=404, detail="Utterance not found")
+        
+        current_inclusion = utterance[6] if len(utterance) > 6 else False
+        current_embedding_id = utterance[7] if len(utterance) > 7 else None
+        
+        if include_in_pinecone == current_inclusion:
+            # No change needed
+            cur.close()
+            conn.close()
+            return {
+                "success": True,
+                "utterance_id": utterance_id,
+                "included_in_pinecone": current_inclusion,
+                "embedding_id": current_embedding_id,
+                "message": "No change needed"
+            }
+        
+        if include_in_pinecone:
+            # Include in Pinecone - create embedding
+            print(f"Adding utterance {utterance_id} to Pinecone...")
+            
+            # Get speaker name for Pinecone metadata
+            cur.execute("SELECT name FROM speakers WHERE id = %s", (utterance[1],))
+            speaker_row = cur.fetchone()
+            if not speaker_row:
+                raise HTTPException(status_code=404, detail="Speaker not found")
+            
+            speaker_name = speaker_row[0]
+            audio_file_path = utterance[3]  # audio_file from DB
+            
+            try:
+                # Generate embedding for this utterance
+                from modules import embed
+                
+                # Download audio file from S3 if needed
+                if audio_file_path.startswith('audio/'):
+                    # This is an S3 path, need to download temporarily
+                    from modules.database.s3_operations import downloadFile
+                    import tempfile
+                    import os
+                    
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+                        local_audio_path = tmp_file.name
+                    
+                    try:
+                        downloadFile(audio_file_path, local_audio_path)
+                        embedding = embed.embed(local_audio_path)
+                    finally:
+                        if os.path.exists(local_audio_path):
+                            os.remove(local_audio_path)
+                else:
+                    # Local file path
+                    embedding = embed.embed(audio_file_path)
+                
+                # Create unique embedding ID
+                import uuid
+                embedding_id = f"utterance_{speaker_name.replace(' ', '_')}_{uuid.uuid4().hex[:8]}"
+                
+                # Add to Pinecone
+                if pinecone_index:
+                    metadata = {
+                        "speaker_name": speaker_name,
+                        "utterance_id": utterance_id,
+                        "source_type": "manual_inclusion",
+                        "text": utterance[2]  # utterance text
+                    }
+                    
+                    # Convert embedding to list if needed
+                    if hasattr(embedding, 'tolist'):
+                        embedding_list = embedding.tolist()
+                    else:
+                        embedding_list = embedding
+                    
+                    pinecone_index.upsert(vectors=[(embedding_id, embedding_list, metadata)])
+                    print(f"✅ Added embedding {embedding_id} to Pinecone for utterance {utterance_id}")
+                else:
+                    raise HTTPException(status_code=500, detail="Pinecone not initialized")
+                
+                # Update database
+                cur.execute("""
+                    UPDATE utterances 
+                    SET included_in_pinecone = %s, utterance_embedding_id = %s
+                    WHERE id = %s
+                """, (True, embedding_id, utterance_id))
+                
+            except Exception as e:
+                print(f"❌ Error creating Pinecone embedding: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Failed to create Pinecone embedding: {str(e)}")
+        
+        else:
+            # Remove from Pinecone
+            print(f"Removing utterance {utterance_id} from Pinecone...")
+            
+            if current_embedding_id and pinecone_index:
+                try:
+                    pinecone_index.delete(ids=[current_embedding_id])
+                    print(f"✅ Removed embedding {current_embedding_id} from Pinecone")
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to remove embedding from Pinecone: {str(e)}")
+                    # Continue anyway to update database
+            
+            # Update database
+            cur.execute("""
+                UPDATE utterances 
+                SET included_in_pinecone = %s, utterance_embedding_id = NULL
+                WHERE id = %s
+            """, (False, utterance_id))
+        
+        conn.commit()
+        
+        # Get updated values
+        final_embedding_id = embedding_id if include_in_pinecone else None
+        
+        cur.close()
+        conn.close()
+        
+        return {
+            "success": True,
+            "utterance_id": utterance_id,
+            "included_in_pinecone": include_in_pinecone,
+            "embedding_id": final_embedding_id,
+            "message": "Inclusion status updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error toggling utterance Pinecone inclusion: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.put("/api/speakers/{from_speaker_id}/update-all-utterances")
 async def update_all_utterances(from_speaker_id: str, to_speaker_id: str = Form(...)):
     try:
