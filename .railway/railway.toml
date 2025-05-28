@@ -1,6 +1,7 @@
 [build]
-command = "pip install --no-cache-dir -r requirements.txt"
+command = "pip install -r requirements.txt"
 
 [deploy]
 healthcheckPath = "/health"
 restartPolicyType = "on_failure"
+startCommand = "uvicorn app:app --host 0.0.0.0 --port $PORT"
