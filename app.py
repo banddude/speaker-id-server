@@ -970,13 +970,13 @@ async def toggle_utterance_pinecone_inclusion(utterance_id: str, request: Reques
                     
                     try:
                         downloadFile(audio_file_path, local_audio_path)
-                        embedding = embed.embed(local_audio_path)
+                        embedding = embed(local_audio_path)
                     finally:
                         if os.path.exists(local_audio_path):
                             os.remove(local_audio_path)
                 else:
                     # Local file path
-                    embedding = embed.embed(audio_file_path)
+                    embedding = embed(audio_file_path)
                 
                 # Create unique embedding ID
                 import uuid
@@ -1465,7 +1465,7 @@ async def add_pinecone_speaker(
             wav_file = convert_to_wav(tmp_path)
             
             # Generate embedding
-            embedding = embed.embed(wav_file)
+            embedding = embed(wav_file)
             
             # Create unique ID and metadata
             unique_id = f"speaker_{speaker_name}_{uuid.uuid4().hex[:8]}"
@@ -1521,7 +1521,7 @@ async def add_pinecone_embedding(
             wav_file = convert_to_wav(tmp_path)
             
             # Generate embedding
-            embedding = embed.embed(wav_file)
+            embedding = embed(wav_file)
             
             # Create unique ID and metadata
             unique_id = f"speaker_{speaker_name}_{uuid.uuid4().hex[:8]}"
