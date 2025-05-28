@@ -2,7 +2,7 @@ import os
 import json
 import assemblyai as aai
 from pinecone import Pinecone
-import torch
+# import torch  # Removed - not needed since embed API returns Python lists
 import numpy as np
 from pydub import AudioSegment
 from datetime import datetime
@@ -95,12 +95,12 @@ def add_embedding_to_pinecone(embedding, speaker_name, source_file, is_short=Fal
         metadata["duration_seconds"] = duration_seconds
     
     # Convert embedding to correct format for Pinecone
-    if isinstance(embedding, torch.Tensor):
-        embedding_list = embedding.squeeze().cpu().numpy().tolist()
-    elif isinstance(embedding, np.ndarray):
+    # Note: embed API returns Python lists, so torch.Tensor check removed
+    if isinstance(embedding, np.ndarray):
         embedding_list = embedding.squeeze().tolist()
     else:
-        embedding_list = embedding.tolist()
+        # embedding is already a Python list from the API
+        embedding_list = embedding
     
     # Upload to Pinecone
     index.upsert(vectors=[(unique_id, embedding_list, metadata)])

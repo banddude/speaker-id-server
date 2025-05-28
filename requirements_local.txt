@@ -12,3 +12,4 @@ werkzeug==2.2.3
 websockets
 pydantic==2.5.2
 numpy==1.26.2
+torch==2.1.1
