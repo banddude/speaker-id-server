@@ -534,59 +534,6 @@ async def get_conversation(conversation_id: str):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/conversations/{conversation_id}/audio")
-async def get_conversation_audio(conversation_id: str):
-    """Get the original audio file for the entire conversation"""
-    try:
-        # Connect to the database
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Get the conversation's original audio path - try both database ID and conversation_id string
-        cur.execute("""
-            SELECT original_audio FROM conversations WHERE id = %s
-        """, (conversation_id,))
-        
-        conversation = cur.fetchone()
-        
-        if not conversation:
-            # Try finding by conversation_id string
-            cur.execute("""
-                SELECT original_audio FROM conversations WHERE conversation_id = %s
-            """, (conversation_id,))
-            conversation = cur.fetchone()
-            
-            if not conversation:
-                raise HTTPException(status_code=404, detail="Conversation not found")
-        
-        original_audio_path = conversation[0]
-        
-        if not original_audio_path:
-            raise HTTPException(status_code=404, detail="Original audio file not found")
-        
-        # Generate a presigned URL for the original audio file
-        presigned_url = generate_presigned_url(original_audio_path)
-        
-        if not presigned_url:
-            raise HTTPException(status_code=404, detail="Audio file not accessible")
-        
-        print(f"Generated presigned URL for conversation {conversation_id}: {original_audio_path}")
-        
-        # Return a redirect to the presigned URL
-        return RedirectResponse(url=presigned_url)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error getting conversation audio: {str(e)}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if 'cur' in locals() and cur:
-            cur.close()
-        if 'conn' in locals() and conn:
-            conn.close()
-
 @app.post("/api/conversations/upload")
 async def upload_conversation(
     file: UploadFile = File(...),
