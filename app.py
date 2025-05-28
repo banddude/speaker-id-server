@@ -460,7 +460,8 @@ async def get_conversation(conversation_id: str):
         # Get the utterances
         db_conversation_id = conversation[0]  # The database ID
         cur.execute("""
-            SELECT id, speaker_id, start_time, end_time, text, start_ms, end_ms
+            SELECT id, speaker_id, start_time, end_time, text, start_ms, end_ms, 
+                   included_in_pinecone, utterance_embedding_id
             FROM utterances
             WHERE conversation_id = %s
             ORDER BY start_ms
@@ -504,6 +505,8 @@ async def get_conversation(conversation_id: str):
             end_time = u[3]    # end_time from DB
             start_ms = u[5]    # start_ms from DB
             end_ms = u[6]      # end_ms from DB
+            included_in_pinecone = u[7] if len(u) > 7 else False  # included_in_pinecone from DB
+            utterance_embedding_id = u[8] if len(u) > 8 else None  # utterance_embedding_id from DB
             
             # If time strings are null but ms values are present, format them
             if (start_time is None or end_time is None) and (start_ms is not None and end_ms is not None):
@@ -520,6 +523,8 @@ async def get_conversation(conversation_id: str):
                 "start_ms": start_ms,
                 "end_ms": end_ms,
                 "text": u[4],
+                "included_in_pinecone": included_in_pinecone,
+                "utterance_embedding_id": utterance_embedding_id,
                 "audio_url": f"/api/audio/{str(db_conversation_id)}/{utterance_id}"
             })
         
