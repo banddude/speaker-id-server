@@ -955,6 +955,34 @@ async def toggle_utterance_pinecone_inclusion(utterance_id: str, request: Reques
             speaker_name = speaker_row[0]
             audio_file_path = utterance[3]  # audio_file from DB
             
+            # If audio_file_path is None, construct from conversation data
+            if not audio_file_path:
+                # Get conversation details for path construction
+                cur.execute("""
+                    SELECT conversation_id FROM conversations 
+                    WHERE id = (SELECT conversation_id FROM utterances WHERE id = %s)
+                """, (utterance_id,))
+                conv_result = cur.fetchone()
+                if conv_result:
+                    conv_id_str = conv_result[0]
+                    # Try multiple path formats
+                    paths_to_try = [
+                        f"conversations/conversation_{conv_id_str}/utterances/utterance_001.wav",
+                        f"conversations/conversation_{conv_id_str}/utterances/utterance_000.wav",
+                        f"conversations/conversation_{conv_id_str}/utterances/utterance_002.wav",
+                    ]
+                    
+                    # Find first working path
+                    for test_path in paths_to_try:
+                        presigned_url = generate_presigned_url(test_path)
+                        if presigned_url:
+                            audio_file_path = test_path
+                            print(f"Found audio file at: {test_path}")
+                            break
+                    
+                    if not audio_file_path:
+                        raise HTTPException(status_code=404, detail="Audio file not found for this utterance")
+            
             try:
                 # Generate embedding for this utterance
                 
