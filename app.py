@@ -593,14 +593,14 @@ async def get_speakers():
         cur = conn.cursor()
         
         print("Executing speakers query...")
-        # Get all speakers with their utterance counts and total duration
+        # Get all speakers with their utterance counts, total duration, and pinecone links
         cur.execute("""
-            SELECT s.id, s.name,
+            SELECT s.id, s.name, s.pinecone_speaker_name,
                 COUNT(DISTINCT u.id) as utterance_count,
                 COALESCE(SUM(u.end_ms - u.start_ms), 0) as total_duration
             FROM speakers s
             LEFT JOIN utterances u ON s.id = u.speaker_id
-            GROUP BY s.id, s.name
+            GROUP BY s.id, s.name, s.pinecone_speaker_name
             ORDER BY s.name
         """)
         
@@ -613,8 +613,9 @@ async def get_speakers():
             result.append({
                 "id": str(s[0]),  # Convert to string to ensure it's serializable
                 "name": s[1],
-                "utterance_count": int(s[2]) if s[2] is not None else 0,
-                "total_duration": int(s[3]) if s[3] is not None else 0
+                "pinecone_speaker_name": s[2],  # Include pinecone link
+                "utterance_count": int(s[3]) if s[3] is not None else 0,
+                "total_duration": int(s[4]) if s[4] is not None else 0
             })
         
         cur.close()
@@ -1131,6 +1132,111 @@ async def delete_conversation(conversation_id: str):
         raise
     except Exception as e:
         print(f"Error deleting conversation: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============= SPEAKER-PINECONE LINKING ENDPOINTS =============
+
+@app.put("/api/speakers/{speaker_id}/link-pinecone")
+async def link_speaker_to_pinecone(speaker_id: str, request: Request):
+    """Link a database speaker to an existing Pinecone speaker"""
+    try:
+        data = await request.json()
+        pinecone_speaker_name = data.get("pinecone_speaker_name")
+        
+        if not pinecone_speaker_name:
+            raise HTTPException(status_code=400, detail="pinecone_speaker_name is required")
+        
+        # Connect to database
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if speaker exists
+        cur.execute("SELECT id, name FROM speakers WHERE id = %s", (speaker_id,))
+        speaker = cur.fetchone()
+        
+        if not speaker:
+            raise HTTPException(status_code=404, detail="Speaker not found")
+        
+        # Check if Pinecone speaker exists
+        if not pinecone_index:
+            raise HTTPException(status_code=500, detail="Pinecone not initialized")
+            
+        if not check_speaker_exists(pinecone_speaker_name):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Pinecone speaker '{pinecone_speaker_name}' does not exist"
+            )
+        
+        # Update the link
+        cur.execute(
+            "UPDATE speakers SET pinecone_speaker_name = %s WHERE id = %s",
+            (pinecone_speaker_name, speaker_id)
+        )
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return {
+            "success": True,
+            "speaker_id": speaker_id,
+            "speaker_name": speaker[1],
+            "pinecone_speaker_name": pinecone_speaker_name
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error linking speaker to Pinecone: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/speakers/{speaker_id}/unlink-pinecone")
+async def unlink_speaker_from_pinecone(speaker_id: str):
+    """Remove the link between a database speaker and Pinecone speaker"""
+    try:
+        # Connect to database
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if speaker exists and get current link
+        cur.execute(
+            "SELECT id, name, pinecone_speaker_name FROM speakers WHERE id = %s", 
+            (speaker_id,)
+        )
+        speaker = cur.fetchone()
+        
+        if not speaker:
+            raise HTTPException(status_code=404, detail="Speaker not found")
+        
+        if not speaker[2]:  # pinecone_speaker_name is None
+            raise HTTPException(
+                status_code=400, 
+                detail="Speaker is not currently linked to any Pinecone speaker"
+            )
+        
+        # Remove the link
+        cur.execute(
+            "UPDATE speakers SET pinecone_speaker_name = NULL WHERE id = %s",
+            (speaker_id,)
+        )
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return {
+            "success": True,
+            "speaker_id": speaker_id,
+            "speaker_name": speaker[1],
+            "previous_pinecone_speaker_name": speaker[2]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error unlinking speaker from Pinecone: {str(e)}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
