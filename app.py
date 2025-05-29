@@ -1341,7 +1341,7 @@ async def delete_conversation(conversation_id: str):
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Check if conversation exists
+        # Check if conversation exists and get conversation_id string for S3 operations
         cur.execute("""
             SELECT id, conversation_id FROM conversations WHERE id = %s
         """, (conversation_id,))
@@ -1354,27 +1354,72 @@ async def delete_conversation(conversation_id: str):
                 detail=f"Conversation with ID '{conversation_id}' not found"
             )
         
-        # Delete utterances
+        db_id = conversation[0]  # UUID database ID
+        conv_id_str = conversation[1]  # String conversation ID for S3 paths
+        
+        # Step 1: List all S3 objects for this conversation
+        from modules.database.s3_operations import s3_client, BUCKET_NAME
+        prefix = f"conversations/{conv_id_str}/"
+        
+        print(f"Listing S3 objects with prefix: {prefix}")
+        resp = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=prefix)
+        keys = [obj["Key"] for obj in resp.get("Contents", [])]
+        
+        print(f"Found {len(keys)} S3 objects to delete")
+        
+        # Step 2: Delete them from S3
+        deleted_s3_count = 0
+        if keys:
+            delete_objects = {"Objects": [{"Key": k} for k in keys]}
+            delete_result = s3_client.delete_objects(Bucket=BUCKET_NAME, Delete=delete_objects)
+            deleted_s3_count = len(delete_result.get("Deleted", []))
+            
+            # Log any errors
+            if "Errors" in delete_result and delete_result["Errors"]:
+                for error in delete_result["Errors"]:
+                    print(f"Error deleting S3 object {error['Key']}: {error['Code']} - {error['Message']}")
+        
+        # Step 3: Delete Pinecone embeddings for this conversation's utterances
+        deleted_pinecone_count = 0
+        if pinecone_index:
+            try:
+                # Get all utterance embedding IDs for this conversation
+                cur.execute("""
+                    SELECT utterance_embedding_id FROM utterances 
+                    WHERE conversation_id = %s AND utterance_embedding_id IS NOT NULL
+                """, (db_id,))
+                embedding_ids = [row[0] for row in cur.fetchall() if row[0]]
+                
+                if embedding_ids:
+                    pinecone_index.delete(ids=embedding_ids)
+                    deleted_pinecone_count = len(embedding_ids)
+                    print(f"Deleted {deleted_pinecone_count} embeddings from Pinecone")
+            except Exception as e:
+                print(f"Warning: Failed to delete Pinecone embeddings: {str(e)}")
+                # Continue with database deletion even if Pinecone cleanup fails
+        
+        # Step 4: Delete from database (utterances first due to foreign key constraints)
         cur.execute("""
             DELETE FROM utterances WHERE conversation_id = %s
-        """, (conversation_id,))
+        """, (db_id,))
+        deleted_utterances = cur.rowcount
         
         # Delete conversation
         cur.execute("""
             DELETE FROM conversations WHERE id = %s
-        """, (conversation_id,))
-        
-        # Delete files from S3
-        s3_folder = f"conversations/{conversation[1]}"
-        deleteFolder(s3_folder)
+        """, (db_id,))
+        deleted_conversations = cur.rowcount
         
         conn.commit()
         cur.close()
         conn.close()
         
         return {
-            "success": True,
-            "id": conversation_id
+            "status": "ok",
+            "deleted_s3_objects": deleted_s3_count,
+            "deleted_db_rows": deleted_conversations,
+            "deleted_utterances": deleted_utterances,
+            "deleted_pinecone_embeddings": deleted_pinecone_count
         }
     
     except HTTPException:
