@@ -1398,13 +1398,29 @@ async def delete_conversation(conversation_id: str):
                 print(f"Warning: Failed to delete Pinecone embeddings: {str(e)}")
                 # Continue with database deletion even if Pinecone cleanup fails
         
-        # Step 4: Delete from database (utterances first due to foreign key constraints)
+        # Step 4: Delete from database (in correct order to avoid foreign key constraints)
+        # First delete word_timestamps that reference utterances
+        cur.execute("""
+            DELETE FROM word_timestamps 
+            WHERE utterance_id IN (
+                SELECT id FROM utterances WHERE conversation_id = %s
+            )
+        """, (db_id,))
+        deleted_word_timestamps = cur.rowcount
+        
+        # Then delete utterances
         cur.execute("""
             DELETE FROM utterances WHERE conversation_id = %s
         """, (db_id,))
         deleted_utterances = cur.rowcount
         
-        # Delete conversation
+        # Delete conversation-speaker associations
+        cur.execute("""
+            DELETE FROM conversations_speakers WHERE conversation_id = %s
+        """, (db_id,))
+        deleted_conversation_speakers = cur.rowcount
+        
+        # Finally delete the conversation
         cur.execute("""
             DELETE FROM conversations WHERE id = %s
         """, (db_id,))
@@ -1419,6 +1435,8 @@ async def delete_conversation(conversation_id: str):
             "deleted_s3_objects": deleted_s3_count,
             "deleted_db_rows": deleted_conversations,
             "deleted_utterances": deleted_utterances,
+            "deleted_word_timestamps": deleted_word_timestamps,
+            "deleted_conversation_speakers": deleted_conversation_speakers,
             "deleted_pinecone_embeddings": deleted_pinecone_count
         }
     
