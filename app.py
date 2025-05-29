@@ -955,36 +955,62 @@ async def toggle_utterance_pinecone_inclusion(utterance_id: str, request: Reques
             
             try:
                 # Generate embedding for this utterance
-                # Use the existing audio endpoint to get the file
+                # Use direct S3 access instead of calling our own endpoint
                 import tempfile
-                import requests
                 import os
                 import uuid
                 
-                # Get conversation ID for audio URL
+                # Get conversation details for S3 path construction
                 cur.execute("""
-                    SELECT conversation_id FROM utterances WHERE id = %s
+                    SELECT c.conversation_id 
+                    FROM conversations c
+                    JOIN utterances u ON c.id = u.conversation_id
+                    WHERE u.id = %s
                 """, (utterance_id,))
                 conv_row = cur.fetchone()
                 if not conv_row:
                     raise HTTPException(status_code=404, detail="Conversation not found for utterance")
                 
-                conv_db_id = conv_row[0]
+                conv_id_str = conv_row[0]
                 
-                # Use the existing audio endpoint
-                audio_url = f"https://speaker-id-server-production.up.railway.app/api/audio/{conv_db_id}/{utterance_id}"
+                # Use the same path-finding logic as get_audio endpoint
+                s3_path = None
+                paths_to_try = [
+                    # Standard 3-digit formatted path (001, 002, etc.)
+                    f"conversations/conversation_{conv_id_str}/utterances/utterance_001.wav",
+                    f"conversations/conversation_{conv_id_str}/utterances/utterance_002.wav",
+                    f"conversations/conversation_{conv_id_str}/utterances/utterance_003.wav",
+                    f"conversations/conversation_{conv_id_str}/utterances/utterance_000.wav",
+                    
+                    # Try with 2-digit format
+                    f"conversations/conversation_{conv_id_str}/utterances/utterance_01.wav",
+                    f"conversations/conversation_{conv_id_str}/utterances/utterance_02.wav",
+                    
+                    # Try with no leading zeros
+                    f"conversations/conversation_{conv_id_str}/utterances/utterance_1.wav",
+                    f"conversations/conversation_{conv_id_str}/utterances/utterance_2.wav",
+                ]
                 
-                # Download the audio file temporarily
+                print("Finding audio file in S3, trying paths:")
+                for path in paths_to_try:
+                    print(f"Trying path: {path}")
+                    presigned_url = generate_presigned_url(path)
+                    if presigned_url:
+                        print(f"Found file at: {path}")
+                        s3_path = path
+                        break
+                
+                if not s3_path:
+                    print("Could not find audio file at any expected path")
+                    raise HTTPException(status_code=404, detail="Audio file not found in storage")
+                
+                # Download directly from S3 using the path
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
                     local_audio_path = tmp_file.name
                 
                 try:
-                    print(f"Downloading audio from: {audio_url}")
-                    response = requests.get(audio_url, allow_redirects=True)
-                    response.raise_for_status()
-                    
-                    with open(local_audio_path, 'wb') as f:
-                        f.write(response.content)
+                    print(f"Downloading from S3 path: {s3_path}")
+                    downloadFile(s3_path, local_audio_path)
                     
                     # Generate embedding
                     embedding = embed(local_audio_path)
