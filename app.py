@@ -159,6 +159,51 @@ def check_speaker_exists(speaker_name):
     )
     return len(results['matches']) > 0
 
+def find_utterance_s3_path(conversation_id_str, utterance_id, utterance_idx=None):
+    """Find the S3 path for an utterance audio file using the same logic as get_audio"""
+    
+    # If utterance_idx is provided, use it, otherwise try to parse utterance_id
+    if utterance_idx is None:
+        try:
+            utterance_idx = int(utterance_id) if str(utterance_id).isdigit() else 0
+        except:
+            utterance_idx = 0
+    
+    print(f"Finding S3 path for conversation {conversation_id_str}, utterance {utterance_id}, index {utterance_idx}")
+    
+    # Create multiple path variations to try (same as get_audio)
+    paths_to_try = [
+        # Standard 3-digit formatted path (001, 002, etc.)
+        f"conversations/conversation_{conversation_id_str}/utterances/utterance_{utterance_idx:03d}.wav",
+        
+        # Try with the raw ID
+        f"conversations/conversation_{conversation_id_str}/utterances/utterance_{utterance_id}.wav",
+        
+        # Try with adding +1 to the index (in case of off-by-one error)
+        f"conversations/conversation_{conversation_id_str}/utterances/utterance_{(utterance_idx+1):03d}.wav",
+        
+        # Try without the utterances subdirectory
+        f"conversations/conversation_{conversation_id_str}/utterances/utterance_{utterance_idx:03d}.wav",
+        f"conversations/conversation_{conversation_id_str}/utterances/utterance_{utterance_id}.wav",
+        
+        # Try with 2-digit format
+        f"conversations/conversation_{conversation_id_str}/utterances/utterance_{utterance_idx:02d}.wav",
+        
+        # Try with no leading zeros
+        f"conversations/conversation_{conversation_id_str}/utterances/utterance_{utterance_idx}.wav",
+    ]
+    
+    print("Trying S3 paths:")
+    for path in paths_to_try:
+        print(f"Trying path: {path}")
+        presigned_url = generate_presigned_url(path)
+        if presigned_url:
+            print(f"Found file at: {path}")
+            return path
+    
+    print("Could not find audio file at any expected path")
+    return None
+
 # ============= ROUTES FOR PAGE 1: MAIN DASHBOARD =============
 
 @app.get("/", response_class=HTMLResponse)
@@ -317,7 +362,7 @@ async def get_audio(conversation_id: str, utterance_id: str):
         # Get the utterance details - use conversation database ID
         db_conversation_id = conversation[0]
         cur.execute("""
-            SELECT id, utterance_id, start_time, end_time, audio_file FROM utterances 
+            SELECT id, utterance_id, start_time, end_time, audio_file, text FROM utterances 
             WHERE id = %s AND conversation_id = %s
         """, (utterance_id, db_conversation_id))
         utterance = cur.fetchone()
@@ -326,7 +371,7 @@ async def get_audio(conversation_id: str, utterance_id: str):
             print(f"Utterance {utterance_id} not found for conversation {db_conversation_id}, trying as utterance_id string")
             # Try finding by utterance_id string
             cur.execute("""
-                SELECT id, utterance_id, start_time, end_time, audio_file FROM utterances 
+                SELECT id, utterance_id, start_time, end_time, audio_file, text FROM utterances 
                 WHERE utterance_id = %s AND conversation_id = %s
             """, (utterance_id, db_conversation_id))
             utterance = cur.fetchone()
@@ -340,6 +385,7 @@ async def get_audio(conversation_id: str, utterance_id: str):
         
         # Get the S3 path for the utterance
         s3_path = utterance[4]
+        utterance_text = utterance[5]
         if not s3_path:
             # Try both path formats
             conv_id_str = conversation[1]  # Use the conversation_id string
@@ -960,49 +1006,52 @@ async def toggle_utterance_pinecone_inclusion(utterance_id: str, request: Reques
                 import os
                 import uuid
                 
-                # Get conversation details for S3 path construction
+                # Get conversation and utterance details (same as get_audio)
+                # First find the conversation
                 cur.execute("""
-                    SELECT c.conversation_id 
-                    FROM conversations c
+                    SELECT c.id, c.conversation_id FROM conversations c
                     JOIN utterances u ON c.id = u.conversation_id
                     WHERE u.id = %s
                 """, (utterance_id,))
-                conv_row = cur.fetchone()
-                if not conv_row:
+                conversation = cur.fetchone()
+                
+                if not conversation:
                     raise HTTPException(status_code=404, detail="Conversation not found for utterance")
                 
-                conv_id_str = conv_row[0]
+                db_conversation_id = conversation[0]
+                conv_id_str = conversation[1]
                 
-                # Use the same path-finding logic as get_audio endpoint
-                s3_path = None
-                paths_to_try = [
-                    # Standard 3-digit formatted path (001, 002, etc.)
-                    f"conversations/conversation_{conv_id_str}/utterances/utterance_001.wav",
-                    f"conversations/conversation_{conv_id_str}/utterances/utterance_002.wav",
-                    f"conversations/conversation_{conv_id_str}/utterances/utterance_003.wav",
-                    f"conversations/conversation_{conv_id_str}/utterances/utterance_000.wav",
-                    
-                    # Try with 2-digit format
-                    f"conversations/conversation_{conv_id_str}/utterances/utterance_01.wav",
-                    f"conversations/conversation_{conv_id_str}/utterances/utterance_02.wav",
-                    
-                    # Try with no leading zeros
-                    f"conversations/conversation_{conv_id_str}/utterances/utterance_1.wav",
-                    f"conversations/conversation_{conv_id_str}/utterances/utterance_2.wav",
-                ]
+                # Get the utterance details including utterance_id field (same as get_audio)
+                cur.execute("""
+                    SELECT id, utterance_id, start_time, end_time, audio_file, text FROM utterances 
+                    WHERE id = %s AND conversation_id = %s
+                """, (utterance_id, db_conversation_id))
+                utterance_details = cur.fetchone()
                 
-                print("Finding audio file in S3, trying paths:")
-                for path in paths_to_try:
-                    print(f"Trying path: {path}")
-                    presigned_url = generate_presigned_url(path)
-                    if presigned_url:
-                        print(f"Found file at: {path}")
-                        s3_path = path
-                        break
+                if not utterance_details:
+                    raise HTTPException(status_code=404, detail="Utterance details not found")
+                
+                # Get S3 path using the exact same logic as get_audio
+                s3_path = utterance_details[4]  # audio_file from DB
+                utterance_text = utterance_details[5]  # text field
                 
                 if not s3_path:
-                    print("Could not find audio file at any expected path")
-                    raise HTTPException(status_code=404, detail="Audio file not found in storage")
+                    # Use the same path construction logic as get_audio
+                    if utterance_details[1] and str(utterance_details[1]).isdigit():
+                        utterance_idx = int(utterance_details[1])
+                    else:
+                        try:
+                            utterance_idx = int(utterance_id)
+                        except:
+                            utterance_idx = 0
+                    
+                    print(f"Using utterance index {utterance_idx} for S3 path construction")
+                    
+                    # Use helper function with proper utterance index
+                    s3_path = find_utterance_s3_path(conv_id_str, utterance_id, utterance_idx)
+                    
+                    if not s3_path:
+                        raise HTTPException(status_code=404, detail="Audio file not found in storage")
                 
                 # Download directly from S3 using the path
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
@@ -1028,7 +1077,7 @@ async def toggle_utterance_pinecone_inclusion(utterance_id: str, request: Reques
                         "speaker_name": speaker_name,
                         "utterance_id": utterance_id,
                         "source_type": "manual_inclusion",
-                        "text": utterance[2]  # utterance text
+                        "text": utterance_text
                     }
                     
                     # Convert embedding to list if needed
